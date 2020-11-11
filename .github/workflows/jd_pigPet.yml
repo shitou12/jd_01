@@ -35,7 +35,7 @@ jobs:
       - name: npm install
         run: |
           npm install
-      - name: '运行 【金融养猪脚本】'
+      - name: '运行 【金融养猪】'
         run: |
           node jd_pigPet.js
         env:
