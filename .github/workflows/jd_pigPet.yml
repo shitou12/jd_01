@@ -37,7 +37,7 @@ jobs:
           npm install
       - name: '运行 【金融养猪脚本】'
         run: |
-          node jd_818.js
+          node jd_pigPet.js
         env:
           JD_COOKIE: ${{ secrets.JD_COOKIE }}
           JD_DEBUG: ${{ secrets.JD_DEBUG }}
