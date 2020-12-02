@@ -3,7 +3,7 @@
  * @Github: https://github.com/whyour
  * @Date: 2020-11-29 13:14:19
  * @LastEditors: whyour
- * @LastEditTime: 2020-12-01 18:48:21
+ * @LastEditTime: 2020-12-02 00:30:57
   quanx:
   [task_local]
   10 * * * * https://raw.githubusercontent.com/whyour/hundun/master/quanx/jx_story.js, tag=京喜金牌厂长, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jdgc.png, enabled=true
@@ -21,8 +21,8 @@ const $ = new Env('京喜金牌厂长');
 const JD_API_HOST = 'https://m.jingxi.com/';
 const jdCookieNode = $.isNode() ? require('./jdCookie.js') : '';
 $.autoCharge = $.getdata('jx_autoCharge') ? $.getdata('jx_autoCharge') === 'true' : false;
-$.showLog = $.getdata('jx_showLog') ? $.getdata('jx_showLog') === 'true' : true;
-$.notifyTime = $.getdata('jx_notifyTime');
+$.showLog = $.getdata('jx_showLog') ? $.getdata('jx_showLog') === 'true' : false;
+$.notifyTime = $.getdata('jxcz_notifyTime');
 $.result = [];
 $.cookieArr = [];
 $.currentCookie = '';
@@ -48,6 +48,18 @@ $.info = {};
       await $.wait(500);
       await browserTask();
       await getReadyCard();
+      await getFriends();
+      await clickManage();
+      const endInfo = await getUserInfo();
+      $.result.push(
+        `任务前钞票：${beginInfo.currentMoneyNum} 任务后钞票：${endInfo.currentMoneyNum}`,
+        `获得钞票：${endInfo.currentMoneyNum - beginInfo.currentMoneyNum}`,
+        `任务前银行钞票：${beginInfo.financialBanknote} 任务后银行钞票：${endInfo.financialBanknote}`,
+        `获得钞票：${endInfo.financialBanknote - beginInfo.financialBanknote}`,
+        `当前等级 ${endInfo.userLevel}, 升级还需投入 ${
+          endInfo.needLevelInvestedMoneyNum - endInfo.curLevelAlreadyInvestedMoneyNum
+        }`,
+      );
       await submitInviteId(userName);
       await createAssistUser();
     }
@@ -79,6 +91,26 @@ function getUserInfo() {
         const { ret, data = {}, msg } = JSON.parse(_data);
         $.log(`\n获取用户信息：${msg}\n${$.showLog ? _data : ''}`);
         $.info = data;
+        resolve(data);
+      } catch (e) {
+        $.logErr(e, resp);
+      } finally {
+        resolve();
+      }
+    });
+  });
+}
+
+function clickManage() {
+  return new Promise(resolve => {
+    $.get(taskUrl('userinfo/IncreaseUserMoney'), async (err, resp, _data) => {
+      try {
+        const { ret, data: { moneyNum = 0 } = {}, msg } = JSON.parse(_data);
+        $.log(`\n点击厂长：${msg}，获得钞票 ${moneyNum}\n${$.showLog ? _data : ''}`);
+        if (ret === 0) {
+          await $.wait(500);
+          await clickManage();
+        }
       } catch (e) {
         $.logErr(e, resp);
       } finally {
@@ -90,14 +122,14 @@ function getUserInfo() {
 
 function submitInviteId(userName) {
   return new Promise(resolve => {
-    if (!$.info || !$.info.encryptPin) {
+    if (!$.info || !$.info.shareId) {
       resolve();
       return;
     }
-    $.log('你的互助码: ' + $.info.encryptPin);
+    $.log('你的互助码: ' + $.info.shareId);
     $.get(
       {
-        url: `https://api.ninesix.cc/api/jx-story/${$.info.encryptPin}/${userName}`,
+        url: `https://api.ninesix.cc/api/jx-story/${$.info.shareId}/${userName}`,
       },
       (err, resp, _data) => {
         try {
@@ -122,10 +154,10 @@ function createAssistUser() {
       try {
         const { data = {} } = JSON.parse(_data);
         $.log(`\n${data.value}\n${$.showLog ? _data : ''}`);
-        $.get(taskUrl('friend/AssistFriend', `shareId=${data.value}`), async (err, resp, data) => {
+        $.get(taskUrl('userinfo/AssistFriend', `shareId=${escape(data.value)}`), (err, resp, data) => {
           try {
             const { msg, data: { rewardMoney = 0 } = {} } = JSON.parse(data);
-            $.log(`\n助力：${msg} 获得红包 ${rewardMoney}\n${$.showLog ? data : ''}`);
+            $.log(`\n助力：${msg} 获得钞票 ${rewardMoney}\n${$.showLog ? data : ''}`);
           } catch (e) {
             $.logErr(e, resp);
           } finally {
@@ -154,13 +186,21 @@ function getAwardDetails() {
   });
 }
 
-function getReadyCard() {
+function getFriends() {
   return new Promise(async resolve => {
-    $.get(taskUrl('userinfo/ReadyCard'), async (err, resp, data) => {
+    $.get(taskUrl('userinfo/GetFriendList'), async (err, resp, data) => {
       try {
-        const { ret, data: { cardInfo = [] } = {}, msg } = JSON.parse(data);
-        $.log(`\n获取翻倍列表 ${msg}，总共${cardInfo.length}个卡片！随机选择一个卡片`);
-        await selectCard(cardInfo[Math.random * cardInfo.length]);
+        const { msg, data: { hireListToday = [] } = {} } = JSON.parse(data);
+        $.log(`\n获取助力好友：${msg}\n${$.showLog ? data : ''}`);
+        for (let i = 0; i < hireListToday.length; i++) {
+          const { awardMoneyStatus, awardHongbaoStatus, bingoActive } = hireListToday[i];
+          if (!awardMoneyStatus) {
+            await awardMoney(i + 1);
+          }
+          if (!awardHongbaoStatus && bingoActive) {
+            await awardHongbao(i + 1);
+          }
+        }
       } catch (e) {
         $.logErr(e, resp);
       } finally {
@@ -170,19 +210,79 @@ function getReadyCard() {
   });
 }
 
-function selectCard(card) {
-  return new Promise(async resolve => {
-    $.get(taskUrl('userinfo/SelectCard', `cardInfo=${JSON.stringify(card)}`), async (err, resp, data) => {
+function awardMoney(id) {
+  return new Promise(resolve => {
+    $.get(taskUrl('userinfo/HireAward', `type=1&position=${id}`), async (err, resp, data) => {
       try {
-        const { ret, msg } = JSON.parse(data);
-        $.log(`\n选择翻倍卡片 ${msg}`);
-        await finishCard(card);
+        const { msg, data: { rewardMoney = 0 } = {} } = JSON.parse(data);
+        $.log(`\n获取助力钞票：${msg}，获得钞票 ${rewardMoney}\n${$.showLog ? data : ''}`);
       } catch (e) {
         $.logErr(e, resp);
       } finally {
         resolve();
       }
     });
+  });
+}
+
+function awardHongbao(id) {
+  return new Promise(resolve => {
+    $.get(taskUrl('userinfo/HireAward', `type=1&position=${id}`), async (err, resp, data) => {
+      try {
+        const { msg, data: { rewardHongbao = 0 } = {} } = JSON.parse(data);
+        $.log(`\n获取助力红包：${msg}，获得红包 ${rewardHongbao}\n${$.showLog ? data : ''}`);
+      } catch (e) {
+        $.logErr(e, resp);
+      } finally {
+        resolve();
+      }
+    });
+  });
+}
+
+function getReadyCard() {
+  return new Promise(async resolve => {
+    $.get(taskUrl('userinfo/ReadyCard'), async (err, resp, data) => {
+      try {
+        const { ret, data: { cardInfo = [] } = {}, msg } = JSON.parse(data);
+        $.log(`\n获取翻倍列表 ${msg}，总共${cardInfo.length}个卡片！${cardInfo.length ? '随机选择一个卡片' : ''}`);
+        if (cardInfo.length > 0) {
+          await selectCard(cardInfo);
+        }
+      } catch (e) {
+        $.logErr(e, resp);
+      } finally {
+        resolve();
+      }
+    });
+  });
+}
+
+function selectCard(cardInfo) {
+  return new Promise(async resolve => {
+    const random = Math.floor(Math.random() * 3);
+    const cardList = [...cardInfo].map((x, i) => {
+      return {
+        cardId: x.cardId,
+        cardPosition: i + 1,
+        cardStatus: i === random ? 1 : 0,
+      };
+    });
+    $.get(
+      taskUrl('userinfo/SelectCard', `cardInfo=${encodeURIComponent(JSON.stringify({ cardInfo: cardList }))}`),
+      async (err, resp, data) => {
+        try {
+          const { ret, msg } = JSON.parse(data);
+          $.log(`\n选择翻倍卡片 ${msg}`);
+          await $.wait(10300);
+          await finishCard(cardInfo[random]);
+        } catch (e) {
+          $.logErr(e, resp);
+        } finally {
+          resolve();
+        }
+      },
+    );
   });
 }
 
@@ -247,11 +347,11 @@ function awardTask({ taskId, taskName }) {
   return new Promise(resolve => {
     $.get(taskListUrl('Award', `taskId=${taskId}`), (err, resp, data) => {
       try {
-        const { msg, ret } = JSON.parse(data);
+        const { msg = `获得钞票`, ret, data: { prizeInfo = '' } = {} } = JSON.parse(data);
         $.log(
-          `\n${taskName}[领奖励]：${msg.indexOf('活动太火爆了') !== -1 ? '任务进行中或者未到任务时间' : msg}\n${
-            $.showLog ? data : ''
-          }`,
+          `\n${taskName}[领奖励]：${
+            msg.indexOf('活动太火爆了') !== -1 ? '任务进行中或者未到任务时间' : msg
+          }：${prizeInfo.slice(0, -2)}\n${$.showLog ? data : ''}`,
         );
         resolve(ret === 0);
       } catch (e) {
@@ -290,10 +390,10 @@ function doTask({ taskId, completedTimes, configTargetTimes, taskName }) {
 
 function signIn() {
   return new Promise(resolve => {
-    $.get(taskUrl('userinfo/SignIn'), async (err, resp, data) => {
+    $.get(taskUrl('userinfo/SignIn', `date=${$.time('yyyyMMdd')}`), async (err, resp, data) => {
       try {
         const { msg, data: { rewardMoneyToday } = {} } = JSON.parse(data);
-        $.log(`\n登录：${msg} 获得红包 ${rewardMoneyToday || 0}\n${$.showLog ? data : ''}`);
+        $.log(`\n签到：${msg} 获得钞票 ${rewardMoneyToday || 0}\n${$.showLog ? data : ''}`);
       } catch (e) {
         $.logErr(e, resp);
       } finally {
@@ -327,7 +427,7 @@ function taskUrl(function_path, body) {
       Cookie: $.currentCookie,
       Accept: `*/*`,
       Connection: `keep-alive`,
-      Referer: `https://wqsd.jd.com/pingou/dream_factory/index.html?jxsid=16064615029143314965&exchange=&ptag=139045.1.2&from_source=outer&jump_rd=17088.24.47&deepLink=1`,
+      Referer: `https://st.jingxi.com/pingou/jx_factory_story/index.html`,
       'Accept-Encoding': `gzip, deflate, br`,
       Host: `m.jingxi.com`,
       'User-Agent': `jdpingou;iPhone;3.15.2;14.2.1;ea00763447803eb0f32045dcba629c248ea53bb3;network/wifi;model/iPhone13,2;appBuild/100365;ADID/00000000-0000-0000-0000-000000000000;supportApplePay/1;hasUPPay/0;pushNoticeIsOpen/0;hasOCPay/0;supportBestPay/0;session/${
@@ -345,7 +445,7 @@ function taskListUrl(function_path, body) {
       Cookie: $.currentCookie,
       Accept: `*/*`,
       Connection: `keep-alive`,
-      Referer: `https://wqsd.jd.com/pingou/dream_factory/index.html?jxsid=16064615029143314965&exchange=&ptag=139045.1.2&from_source=outer&jump_rd=17088.24.47&deepLink=1`,
+      Referer: `https://st.jingxi.com/pingou/jx_factory_story/index.html`,
       'Accept-Encoding': `gzip, deflate, br`,
       Host: `m.jingxi.com`,
       'User-Agent': `jdpingou;iPhone;3.15.2;14.2.1;ea00763447803eb0f32045dcba629c248ea53bb3;network/wifi;model/iPhone13,2;appBuild/100365;ADID/00000000-0000-0000-0000-000000000000;supportApplePay/1;hasUPPay/0;pushNoticeIsOpen/0;hasOCPay/0;supportBestPay/0;session/${
