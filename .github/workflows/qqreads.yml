@@ -21,11 +21,10 @@ jobs:
         
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          repository: shitou12/qqreadworkflow/Task
         run: |
           git clone https://github.com/ziye12/JavaScript.git ~/JavaScript
+        with:
+          repository: shitou12/qqreadworkflow
       - name: Use Node.js 12.x
         uses: actions/setup-node@v1
         with:
