@@ -23,7 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          repository: shitou12/qqreadworkflow
+          repository: shitou12/qqreadworkflow/Task
         run: |
           git clone https://github.com/ziye12/JavaScript.git ~/JavaScript
       - name: Use Node.js 12.x
