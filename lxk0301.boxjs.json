@@ -157,6 +157,9 @@
         "jd2_joy_run_name",
         "jd2_joy_invite_pin",
         "jd2_joy_run_pin"
+        "jd3_joy_run_name",
+        "jd3_joy_invite_pin",
+        "jd3_joy_run_pin"
       ],
       "desc": "宠汪汪的互助码friendPin是京东用户名,不是昵称(可在京东APP->我的->设置查看)。互助码之间用英文逗号隔开,下面给出具体示例,使用时可自行清空重新按格式填写你自己的",
       "settings": [
